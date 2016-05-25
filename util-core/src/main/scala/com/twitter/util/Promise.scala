@@ -179,7 +179,15 @@ object Promise {
    *
    * @note `waitq` will always be a `List[K[A]]`
    */
-  private case class Transforming(waitq: List[K[Nothing]], other: Future[_])
+  private case class Transforming(waitq: List[K[Nothing]], other: Future[_]) {
+    def setOther(another: Future[_]): Unit =
+      unsafe.putObject(this, Transforming.otherOff, another)
+  }
+
+  private object Transforming {
+    val otherOff: Long =
+      unsafe.objectFieldOffset(classOf[Transforming].getDeclaredField("other"))
+  }
 
   /**
    * An unsatisified Promise that has been interrupted by `signal`.
@@ -552,8 +560,7 @@ class Promise[A]
           forwardInterruptsTo(other)
 
       case s@Transforming(waitq, _) =>
-        if (!cas(s, Transforming(waitq, other)))
-          forwardInterruptsTo(other)
+        s.setOther(other)
 
       case Interrupted(_, signal) =>
         other.raise(signal)
